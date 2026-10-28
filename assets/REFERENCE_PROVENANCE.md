@@ -1,7 +1,7 @@
 # Added reference assets
 
 All source pixels came from user-provided references. Coordinates are [x,y,w,h].
-The original video was NOT used to generate templates.
+The v21 assets used screenshots only. codex test1 additionally uses the three frame-20 video crops listed below. That frame is training data, not an independent holdout.
 
 - ghost_ref_a.png: image(20261028-082731).png [450,317,54,78]
 - ghost_ref_b.png: image(20261028-082731).png [714,208,46,79]
@@ -14,3 +14,13 @@ The original video was NOT used to generate templates.
 Static reference screenshots that supplied templates are not independent
 holdout accuracy measurements. Negative region assertions cover explicitly
 labelled regions only. Video decoding and sampled detection are separate checks.
+
+# codex test1 video-derived variants
+
+All coordinates refer to gameplay_camera_motion.mp4 at t=20.0 seconds, 1600x900.
+
+- ghost_video_front.png: [1180,151,62,97]
+- ghost_video_far.png: [1438,153,64,100]
+- ghost_video_back.png: [720,269,61,96]
+
+The remaining video times and labelled negative regions were not used for these crops. No whole-dataset precision/recall claim is made.

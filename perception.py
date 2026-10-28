@@ -37,31 +37,66 @@ class Calibration:
         self.points = points
         self.size = tuple(size)
 
+def read_gauge_info(frame, points, which):
+    """Use a stable interior band, not two blue border rows in a 5px union.
+
+    Each row is measured separately. A candidate needs at least three adjacent
+    rows with a consistent fill and a colored left rail. Thin always-full
+    borders and text rows cannot make the whole gauge read 100 percent.
+    """
+    h,w=frame.shape[:2]
+    (x1,y1),(x2,y2)=points
+    x1,x2,y=int(x1),int(x2),round((y1+y2)/2)
+    unknown=dict(value=None,row=None,rows=0,quality='unknown')
+    if x2-x1<80 or x1<0 or x2>w or y<9 or y>=h-9:return unknown
+    crop=frame[y-8:y+9,x1:x2]
+    if crop.size==0 or float(np.max(crop))<30:return unknown
+    hsv=cv2.cvtColor(crop,cv2.COLOR_BGR2HSV);hue,sat,val=cv2.split(hsv)
+    mask=(((hue<=13)|(hue>=170))&(sat>90)&(val>95)) if which=='hp' else ((hue>=92)&(hue<=138)&(sat>60)&(val>95))
+    measurements=[]
+    for row in range(mask.shape[0]):
+        left=val[row,3:20][mask[row,3:20]]
+        if len(left)<8:measurements.append(None);continue
+        bright=mask[row]&(val[row]>=max(95,float(np.median(left))*.65))
+        cols=np.convolve(bright.astype(float),np.ones(3)/3,mode='same')>=.6
+        if np.mean(cols[3:20])<.5:
+            measurements.append(None);continue
+        far=0;gap=0
+        for i,filled in enumerate(cols):
+            if filled:far=i+1;gap=0
+            else:
+                gap+=1
+                if gap>=6:break
+        measurements.append(min(1.,far/len(cols)))
+    groups=[]
+    for start in range(len(measurements)):
+        values=[]
+        for end in range(start,len(measurements)):
+            value=measurements[end]
+            if value is None:break
+            if values and max(values+[value])-min(values+[value])>.035:break
+            values.append(value)
+            if len(values)>=3:
+                middle=(start+end)/2
+                score=len(values)*3.-abs(middle-8)*.3
+                groups.append((score,float(np.median(values)),round(y-8+middle),len(values)))
+    if not groups:
+        # Empty MP still has a bright blue outline around a dark blue interior.
+        # Require both; a blank/gray capture must remain unknown.
+        if which=='mp':
+            outline=np.mean(mask,axis=1)>.85
+            dark=((hue>=92)&(hue<=138)&(sat>60)&(val>=20)&(val<=95))
+            empty=np.mean(dark,axis=1)>.8
+            for first in range(len(empty)-2):
+                if np.count_nonzero(outline)>=1 and np.all(empty[first:first+3]):
+                    return dict(value=0.,row=y-8+first+1,rows=3,quality='empty_blue_interior')
+        return unknown
+    _,value,row,count=max(groups)
+    return dict(value=value,row=row,rows=count,quality='interior_band')
+
+
 def read_gauge(frame, points, which):
-    h,w = frame.shape[:2]
-    (x1,y1),(x2,y2) = points
-    x1,x2,y = int(x1),int(x2),round((y1+y2)/2)
-    if x2-x1<80 or x1<0 or x2>w or y<3 or y>=h-3:
-        return None
-    crop = frame[y-2:y+3,x1:x2]
-    # A blank capture is unknown, never a valid low-mana decision.
-    if float(np.max(crop)) < 30:
-        return None
-    hsv=cv2.cvtColor(crop,cv2.COLOR_BGR2HSV)
-    hue,sat,val=cv2.split(hsv)
-    mask = (((hue<=13)|(hue>=170))&(sat>90)&(val>65)) if which=='hp' else ((hue>=92)&(hue<=138)&(sat>60)&(val>55))
-    cols=np.mean(mask,axis=0)>=.4
-    cols=np.convolve(cols,np.ones(3)/3,mode='same')>=.4
-    # The bar must start at the calibrated left end; isolated late color isn't fill.
-    if not np.any(cols[:8]):
-        return 0. if np.count_nonzero(cols)<4 else None
-    far=0;gap=0
-    for i,filled in enumerate(cols):
-        if filled: far=i+1;gap=0
-        else:
-            gap+=1
-            if gap>=7: break
-    return min(1.,far/len(cols))
+    return read_gauge_info(frame,points,which)['value']
 
 def read_status(frame, points):
     if len(points)!=4: return None,None

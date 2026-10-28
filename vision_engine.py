@@ -15,6 +15,29 @@ def rect_overlap(a,b):
     ix=max(0,min(ax+aw,bx+bw)-max(ax,bx));iy=max(0,min(ay+ah,by+bh)-max(ay,by))
     return ix*iy/max(1,min(aw*ah,bw*bh))
 
+def rectangular_zone(zone):
+    return zone.get('kind')!='portal' and 'box' in zone and zone.get('geometry')=='rectangle'
+
+
+def segment_hits_zone(start,end,zone,padding=20.):
+    if rectangular_zone(zone):
+        x,y,w,h=zone['box'];pad=zone.get('padding',padding)
+        low=(x-pad,y-pad);high=(x+w+pad,y+h+pad);near,far=0.,1.
+        for axis in (0,1):
+            step=end[axis]-start[axis]
+            if abs(step)<1e-9:
+                if start[axis]<low[axis] or start[axis]>high[axis]:return False
+            else:
+                a=(low[axis]-start[axis])/step;b=(high[axis]-start[axis])/step
+                near=max(near,min(a,b));far=min(far,max(a,b))
+                if near>far:return False
+        return True
+    delta=np.array(end,float)-start;length=float(np.dot(delta,delta))
+    v=np.array([zone['x']-start[0],zone['y']-start[1]],float)
+    t=float(np.clip(np.dot(v,delta)/max(1.,length),0,1))
+    return bool(np.linalg.norm(v-t*delta)<zone['radius']+padding)
+
+
 def nms(items, dist=65):
     keep=[]
     for c in sorted(items,key=lambda o:o['confidence'], reverse=True):
@@ -30,116 +53,92 @@ class VisionEngine:
         self.turtle_templates=[(cv2.imread(str(HERE/'templates'/f'turtle{i}.png'),cv2.IMREAD_GRAYSCALE),0) for i in (1,2)]
         self.turtle_templates += [(cv2.imread(str(HERE/'assets'/name),cv2.IMREAD_GRAYSCALE),foot) for name,foot in [('turtle_shell_ref.png',35),('turtle_shell_large_ref.png',35),('turtle_front_ref.png',0)]]
         self.obstacle_templates=[]
-        for kind in ('stairs','skull'):
+        for kind in ('stairs','skull','pillar'):
             for path in sorted((HERE/'assets').glob(kind+'_*.png')):
                 ref=cv2.imread(str(path),cv2.IMREAD_GRAYSCALE)
                 if ref is not None:self.obstacle_templates.append((kind,ref))
 
+    def _pyramid(self,frame):
+        if getattr(self,'_frame',None) is not frame:
+            self._frame=frame
+            self._gray=cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY)
+            self._small=cv2.resize(self._gray,None,fx=.25,fy=.25,interpolation=cv2.INTER_AREA)
+        return self._gray,self._small
+
+    def _peaks(self,frame,source,scale,threshold,limit=12):
+        if source is None:return []
+        gray,small=self._pyramid(frame)
+        if not hasattr(self,'_scaled'):self._scaled={}
+        key=(id(source),scale)
+        if key not in self._scaled:
+            native=cv2.resize(source,None,fx=scale,fy=scale,interpolation=cv2.INTER_AREA)
+            coarse=cv2.resize(native,None,fx=.25,fy=.25,interpolation=cv2.INTER_AREA)
+            self._scaled[key]=(native,coarse)
+        native,coarse=self._scaled[key];th,tw=native.shape;ch,cw=coarse.shape
+        if th>=gray.shape[0] or tw>=gray.shape[1] or min(ch,cw)<3:return []
+        corr=cv2.matchTemplate(small,coarse,cv2.TM_CCOEFF_NORMED)
+        found=[]
+        # Coarse proposals are never accepted as detections. Validate each at
+        # native resolution in a small neighborhood to retain sprite detail.
+        for _ in range(limit):
+            _,score,_,loc=cv2.minMaxLoc(corr)
+            if score<max(.46,threshold-.24):break
+            x,y=loc;px,py=4*x,4*y
+            x0=max(0,px-8);y0=max(0,py-8)
+            x1=min(gray.shape[1],px+tw+9);y1=min(gray.shape[0],py+th+9)
+            roi=gray[y0:y1,x0:x1]
+            if roi.shape[0]>=th and roi.shape[1]>=tw:
+                refined=cv2.matchTemplate(roi,native,cv2.TM_CCOEFF_NORMED)
+                _,value,_,position=cv2.minMaxLoc(refined)
+                if value>=threshold:found.append((float(value),x0+position[0],y0+position[1],tw,th))
+            cv2.rectangle(corr,(max(0,x-cw//2),max(0,y-ch//2)),(x+cw,y+ch),-1,-1)
+        return found
+
     def portal_candidates(self,frame):
-        h,w=frame.shape[:2]; scale=1.0
-        # The exact blue ring is much more discriminative than cyan color alone:
-        # wheel flashes, pillars and buff auras otherwise look like portals.
-        if self.portal_template is None:return []
-        gray=cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY)
-        hsv=cv2.cvtColor(frame,cv2.COLOR_BGR2HSV)
-        pts=[]
-        # Window width is not sprite scale. Check several actual sprite sizes.
-        for mult in (.72,.86,1.0,1.13):
-            temp=cv2.resize(self.portal_template,None,fx=mult,fy=mult,interpolation=cv2.INTER_AREA)
-            th,tw=temp.shape[:2]
-            if th>=h or tw>=w:continue
-            corr=cv2.matchTemplate(gray,temp,cv2.TM_CCOEFF_NORMED)
-            for _ in range(4):
-                _,score,_,loc=cv2.minMaxLoc(corr)
-                if score<.62:break
-                x,y=loc
-                roi=hsv[y:y+th,x:x+tw]
+        hsv=cv2.cvtColor(frame,cv2.COLOR_BGR2HSV);points=[]
+        for scale in (.72,.86,1.,1.13):
+            for score,x,y,w,h in self._peaks(frame,self.portal_template,scale,.62,6):
+                roi=hsv[y:y+h,x:x+w]
                 cyan=cv2.inRange(roi,(83,55,115),(114,255,255))
-                valid=np.count_nonzero(cyan)>=max(65,roi.shape[0]*roi.shape[1]*.026)
-                if valid:
-                    pts.append({'x':int(x+tw/2),'y':int(y+th*.62),
-                                'radius':int(max(tw,th)*.60+65),
-                                'box':[x,y,tw,th],'kind':'portal','confidence':float(score)})
-                cv2.rectangle(corr,(max(0,x-tw//2),max(0,y-th//2)),
-                              (min(corr.shape[1]-1,x+tw),min(corr.shape[0]-1,y+th)),0,-1)
-        return nms(pts,90)
+                if np.count_nonzero(cyan)>=max(65,w*h*.026):
+                    points.append(dict(x=round(x+w/2),y=round(y+h*.62),radius=round(max(w,h)*.6+65),
+                                       box=[x,y,w,h],kind='portal',confidence=score))
+        return nms(points,90)
 
     def ghost_candidates(self,frame):
-        h,w=frame.shape[:2]; scale=1.0
-        # Low resolution match to reduce CPU load; ghost shape rarely matches strongly.
-        gray=cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY)
-        half=cv2.resize(gray,(max(1,w//2),max(1,h//2)),interpolation=cv2.INTER_AREA)
-        result=[]
+        result=[];h,w=frame.shape[:2]
         for source in self.ghost_templates:
-            for k in (.72,.85,1.0,1.15):
-                ww=max(9,round(source.shape[1]*scale*k/2));hh=max(14,round(source.shape[0]*scale*k/2))
-                if ww>=half.shape[1] or hh>=half.shape[0]:continue
-                temp=cv2.resize(source,(ww,hh),interpolation=cv2.INTER_AREA)
-                if np.std(temp)<8:continue
-                corr=cv2.matchTemplate(half,temp,cv2.TM_CCOEFF_NORMED)
-                for _ in range(18):
-                    _,score,_,loc=cv2.minMaxLoc(corr)
-                    if score<.79:break
-                    x,y=loc;xx=int(2*(x+ww/2));yy=int(2*(y+hh))
-                    if 90<yy<h-20 and 20<xx<w-20:
-                        result.append({'x':xx,'y':yy,'confidence':min(.89,float(score)),
-                                       'kind':'ghost','box':[2*x,2*y,2*ww,2*hh]})
-                    cv2.rectangle(corr,(max(0,x-ww//2),max(0,y-hh//2)),(min(corr.shape[1]-1,x+ww),min(corr.shape[0]-1,y+hh)),0,-1)
-        result += self._ghost_heads(frame)
-        return nms(result,55)
+            for scale in (.72,.85,1.,1.15):
+                for score,x,y,bw,bh in self._peaks(frame,source,scale,.78,14):
+                    if 90<y+bh<h-20:
+                        result.append(dict(x=x+bw//2,y=y+bh,confidence=score,kind='ghost',box=[x,y,bw,bh]))
+        result+=self._ghost_heads(frame)
+        return nms(result,52)
 
     def _ghost_heads(self,frame):
-        gray=cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY)
-        half=cv2.resize(gray,None,fx=.5,fy=.5)
-        out=[]
-        for name in ('ghost_ref_a.png','ghost_ref_b.png','ghost_ref_c.png','ghost_back_ref.png','ghost_2.png','ghost_6.png','ghost_7.png','ghost_8.png'):
-            src=cv2.imread(str(HERE/'assets'/name),cv2.IMREAD_GRAYSCALE)
-            if src is None:continue
-            src=src[:max(25,int(src.shape[0]*.57)),:]
+        if not hasattr(self,'_heads'):
+            self._heads=[]
+            for name in ('ghost_ref_a.png','ghost_ref_b.png','ghost_ref_c.png','ghost_back_ref.png','ghost_2.png','ghost_6.png','ghost_7.png','ghost_8.png','ghost_video_front.png','ghost_video_far.png','ghost_video_back.png'):
+                source=cv2.imread(str(HERE/'assets'/name),cv2.IMREAD_GRAYSCALE)
+                if source is not None:self._heads.append(source[:max(25,round(source.shape[0]*.57))].copy())
+        result=[]
+        for source in self._heads:
             for scale in (.72,.85,.95,1.,1.05,1.15,1.3):
-                temp=cv2.resize(src,None,fx=scale*.5,fy=scale*.5)
-                th,tw=temp.shape
-                if th>=half.shape[0] or tw>=half.shape[1]:continue
-                corr=cv2.matchTemplate(half,temp,cv2.TM_CCOEFF_NORMED)
-                for _ in range(20):
-                    _,score,_,loc=cv2.minMaxLoc(corr)
-                    if score<.81:break
-                    x,y=loc;bx,by=2*x,2*y
-                    # Head match is contextualized by a whole expected body.
-                    bh=round(th*2/ .57);bw=tw*2
-                    if by>55 and by+bh<frame.shape[0]-5:
-                        out.append(dict(x=bx+bw//2,y=by+bh,box=[bx,by,bw,bh],kind='ghost',confidence=float(score)))
-                    cv2.rectangle(corr,(max(0,x-tw//2),max(0,y-th//2)),(x+tw,y+th),0,-1)
-        return out
+                for score,x,y,bw,hh in self._peaks(frame,source,scale,.79,16):
+                    bh=round(hh/.57)
+                    if y>55 and y+bh<frame.shape[0]-5:
+                        result.append(dict(x=x+bw//2,y=y+bh,box=[x,y,bw,bh],kind='ghost',confidence=score))
+        return result
 
     def obstacle_candidates(self,frame):
-        """Mark explicit stairs/skull silhouettes as no-travel zones.
-        Conservative candidate, not a semantic/guaranteed collision map.
-        """
-        h,w=frame.shape[:2]; scale=1.0
-        gray=cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY)
-        reduced=cv2.resize(gray,(max(1,w//2),max(1,h//2)))
-        results=[]
-        for kind,t in self.obstacle_templates:
-            for k in (.72,.86,1.,1.15):
-                src=cv2.resize(t,(max(16,round(t.shape[1]*scale*k/2)),
-                                       max(16,round(t.shape[0]*scale*k/2))))
-                if src.shape[0]>=reduced.shape[0] or src.shape[1]>=reduced.shape[1]:continue
-                r=cv2.matchTemplate(reduced,src,cv2.TM_CCOEFF_NORMED)
-                for _ in range(2):
-                    _,score,_,loc=cv2.minMaxLoc(r)
-                    # Lower threshold blocks movement more often; never proves path safe.
-                    threshold=.71 if kind=='stairs' else .73
-                    if score<threshold:break
-                    x,y=loc;th,tw=src.shape
-                    cx=int((x+tw/2)*2);cy=int((y+th/2)*2)
-                    rad=int((max(tw,th)*1.5+70*scale))
-                    results.append({'x':cx,'y':cy,'radius':rad,
-                                    'box':[2*x,2*y,2*tw,2*th],
-                                    'kind':kind,'confidence':float(score)})
-                    cv2.rectangle(r,(max(0,x-tw//2),max(0,y-th//2)),
-                                  (min(r.shape[1]-1,x+tw),min(r.shape[0]-1,y+th)),0,-1)
-        return nms(results,int(95*scale))
+        result=[]
+        for kind,source in self.obstacle_templates:
+            for scale in (.72,.86,1.,1.15):
+                threshold=.76 if kind=='pillar' else .71 if kind=='stairs' else .73
+                for score,x,y,w,h in self._peaks(frame,source,scale,threshold,4):
+                    result.append(dict(x=round(x+w/2),y=round(y+h/2),radius=round(max(w,h)/2+20),
+                        box=[x,y,w,h],padding=18,geometry='rectangle',kind=kind,confidence=score))
+        return nms(result,80)
 
     def coin_candidates(self,frame,center):
         """Find **nearby gold stacks only** using appearance + local warm-gold pixels.
@@ -205,22 +204,11 @@ class VisionEngine:
         return nms(out,26)
 
     def _turtle_shapes(self,frame):
-        gray=cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY)
-        small=cv2.resize(gray,None,fx=.5,fy=.5)
         result=[]
         for source,foot in self.turtle_templates:
-            if source is None:continue
             for scale in (.55,.72,.85,1.,1.15,1.3,1.5):
-                temp=cv2.resize(source,None,fx=scale*.5,fy=scale*.5)
-                th,tw=temp.shape
-                if th>=small.shape[0] or tw>=small.shape[1]:continue
-                corr=cv2.matchTemplate(small,temp,cv2.TM_CCOEFF_NORMED)
-                for _ in range(16):
-                    _,score,_,loc=cv2.minMaxLoc(corr)
-                    if score<.67:break
-                    x,y=loc
-                    result.append(dict(x=2*x+tw,y=2*(y+th)+round(foot*scale),kind='turtle',confidence=float(score),box=[2*x,2*y,2*tw,2*th]))
-                    cv2.rectangle(corr,(max(0,x-tw//2),max(0,y-th//2)),(x+tw,y+th),0,-1)
+                for score,x,y,w,h in self._peaks(frame,source,scale,.67,12):
+                    result.append(dict(x=x+w//2,y=y+h+round(foot*scale),kind='turtle',confidence=score,box=[x,y,w,h]))
         return result
 
     @staticmethod
@@ -239,7 +227,7 @@ class VisionEngine:
     def analyze(self,frame):
         portals=self.portal_candidates(frame)
         obstacles=self.obstacle_candidates(frame)
-        monsters=nms(self._turtle_shapes(frame)+self.ghost_candidates(frame),65)
+        monsters=nms(self._turtle_shapes(frame)+self.ghost_candidates(frame),52)
         monsters=[m for m in monsters if self.on_ground(frame,m)
                   and not any(z['kind']=='portal' and rect_overlap(m['box'],z['box'])>.35 for z in portals)]
         return {'monsters':monsters,'portals':portals,'obstacles':obstacles}
@@ -345,9 +333,7 @@ class Navigator:
         # point checks could skip a narrow portal between samples.
         delta=np.array([tx-cx,ty-cy],float);length=float(np.dot(delta,delta))
         for z in portals+obstacles:
-            v=np.array([z['x']-cx,z['y']-cy],float)
-            t=float(np.clip(np.dot(v,delta)/max(1.,length),0,1))
-            if np.linalg.norm(v-t*delta)<z['radius']+20:return False
+            if segment_hits_zone(center,target,z,20.):return False
         # Check the WHOLE click corridor at <=4px spacing, even near the player.
         # Reject clipped/unknown patches, void and bright untextured desktop.
         for t in np.linspace(0,1,max(2,int(length**.5/4)+1)):
@@ -357,7 +343,10 @@ class Navigator:
             if np.mean(np.max(patch,axis=2)<33)>.16:return False
             hsv=cv2.cvtColor(patch,cv2.COLOR_BGR2HSV)
             floor=(hsv[:,:,0]>=95)&(hsv[:,:,0]<=140)&(hsv[:,:,1]>25)&(hsv[:,:,2]>32)
-            if np.mean(floor)<.18:return False
+            if np.mean(floor)<.18:
+                neutral=(hsv[:,:,1]<65)&(hsv[:,:,2]>45)&(hsv[:,:,2]<225)
+                texture=float(np.std(cv2.cvtColor(patch,cv2.COLOR_BGR2GRAY)))
+                if np.mean(neutral)<.35 or texture<5.:return False
         return True
     def _path_grid(self,frame,anchor,target,portals,obstacles):
         """A* over visible 28px cells: avoid obvious void, rings and detected stairs.
@@ -375,6 +364,12 @@ class Navigator:
         blocked[-1,:]=True;blocked[:,0]=True;blocked[:,-1]=True
         # Non-navigable structures, expanded to avoid stepping *through* them.
         for z in portals+obstacles:
+            if rectangular_zone(z):
+                x,y,bw,bh=z['box'];pad=z.get('padding',18)
+                x0=max(0,int((x-pad)//cell));x1=min(gw,int((x+bw+pad)//cell)+1)
+                y0=max(0,int((y-pad)//cell));y1=min(gh,int((y+bh+pad)//cell)+1)
+                blocked[y0:y1,x0:x1]=True
+                continue
             xx,yy,rr=float(z['x']),float(z['y']),float(z['radius'])+28
             y0=max(0,int((yy-rr)//cell));y1=min(gh,int((yy+rr)//cell)+1)
             x0=max(0,int((xx-rr)//cell));x1=min(gw,int((xx+rr)//cell)+1)

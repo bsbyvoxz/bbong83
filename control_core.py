@@ -1,4 +1,4 @@
-"""Deterministic v21 policies. No Windows, capture, sleeps or file I/O here.
+"""Deterministic codex test1 policies. No Windows, capture, sleeps or file I/O here.
 
 All clocks passed to this module are monotonic seconds. SENT means an AHK
 SendEvent completed, never that the server accepted a skill.
@@ -177,6 +177,25 @@ class MoveEvidence:
         if not confident or valid-self.valid < 2:
             return 'unknown'
         return 'moved' if hypot(world[0]-self.world[0],world[1]-self.world[1]) >= minimum else 'stuck'
+
+class CombatPresence:
+    """Short visual memory prevents one slow/missed detector frame starving F3.
+
+    Three distinct confirmed empty analyses or eight seconds without evidence
+    clear the memory. Unknown is neither a monster nor a confirmed empty scene.
+    """
+    def __init__(self,hold=8.):
+        self.hold=hold;self.reset()
+    def reset(self):
+        self.last_seen=-1e9;self.last_sequence=None;self.empty=0
+    def observe(self,sequence,monsters,now):
+        if sequence==self.last_sequence:return
+        self.last_sequence=sequence
+        if monsters:
+            self.last_seen=now;self.empty=0
+        else:self.empty=min(3,self.empty+1)
+    def active(self,now):
+        return self.empty<3 and now-self.last_seen<=self.hold
 
 class Controller:
     def __init__(self, config):

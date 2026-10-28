@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Polar v21. Windows/AHK v1.1 runtime, deterministic policies in control_core.
+"""codex test1. Windows/AHK v1.1 runtime, deterministic policies in control_core.
 Filename retained for existing launchers. Offline tests never inject input.
 """
 import ctypes
@@ -15,8 +15,8 @@ import traceback
 import cv2
 import numpy as np
 from bridge import FileBridge, atomic_text
-from control_core import Controller, CoinMemory, MoveEvidence
-from perception import Calibration, BuffIcons, read_status
+from control_core import Controller, CoinMemory, MoveEvidence, CombatPresence
+from perception import Calibration, BuffIcons, read_status, read_gauge_info
 from vision_engine import VisionEngine
 from vision_worker import VisionWorker as PerceptionWorker
 
@@ -55,7 +55,7 @@ def user32():
 class App:
     def __init__(self):
         self.u=user32()
-        self.controller=Controller(CONFIG)
+        self.controller=Controller(CONFIG);self.combat=CombatPresence()
         self.bridge=FileBridge(ROOT);self.bridge.stop()
         self.calibration=Calibration(ROOT/'gauge_points.json')
         self.coins=CoinMemory(CONFIG['coin_suppress_seconds'])
@@ -68,7 +68,7 @@ class App:
         self.last_hp=None;self.last_mp=None;self.region=None;self.pending_move_context=None
         self.bad_reads=0;self.vision_reason="not started";self.last_move_notice=0.
         self.load_state()
-        logging.info('v21.1-movement | F9 anchor | Ctrl+F9 x4 gauges | F10 run/pause | F8 movement | Ctrl+F7 diagnostics | F11 STOP | F12 exit')
+        logging.info('codex test1 | F9 ground below feet | Ctrl+F9 x4 gauges | F10 run/pause | F8 movement | Ctrl+F7 diagnostics | F11 STOP | F12 exit')
         logging.info('Runtime source: %s',ROOT)
         logging.info('F7 alone belongs to game buffs. AHK SendEvent retained. Supervised use only.')
     def region_now(self):
@@ -123,8 +123,8 @@ class App:
                 point=self.cursor_local(region)
                 if not (48<point[0]<size[0]-48 and 100<point[1]<size[1]-48):
                     self.center=None;logging.warning('Anchor outside usable game area; place cursor on character and press F9');continue
-                self.center=point;self.anchor_size=size
-                logging.info('Anchor %s, size %s; approximate motion tracker reset',self.center,size)
+                self.center=(point[0],point[1]-CONFIG.get('player_feet_offset_px',43));self.anchor_size=size
+                logging.info('Ground registered %s; body anchor %s, size %s',point,self.center,size)
             elif name=='F8':
                 self.move=not self.move
                 self.controller.move_evidence=None;self.escape=None
@@ -135,7 +135,7 @@ class App:
                 elif self.center is None or self.anchor_size!=size:logging.warning('START BLOCKED: F9 anchor for this client size')
                 elif not self.bridge.ready():logging.warning('START BLOCKED: AHK v1.1 bridge heartbeat missing; launch START.bat')
                 else:
-                    self.generation+=1;self.snapshot=None;self.available_coins=[];self.coins.invalidate()
+                    self.generation+=1;self.snapshot=None;self.available_coins=[];self.coins.invalidate();self.combat=CombatPresence()
                     self.bridge.begin();self.controller.start(time.monotonic());self.vision_missing_at=time.monotonic()
                     logging.info('RUN; preserved buff queue %s; movement %s',self.controller.buffs.queue,self.move)
             elif name=='F7' and ctrl:
@@ -152,7 +152,9 @@ class App:
             self.coins.invalidate()
             return
         self.snapshot=s;self.vision_reason=s['reason']
-        if s.get('obs') is not None:self.vision_missing_at=None
+        if s.get('obs') is not None:
+            self.vision_missing_at=None
+            self.combat.observe(s.get('semantic_sequence',s['sequence']),s['obs']['monsters'],now)
         if s['sequence']!=self.last_coins:
             self.available_coins=self.coins.update(s['coins'],s['world'],s['confident'],s['sequence'],now)
             self.last_coins=s['sequence']
@@ -239,14 +241,19 @@ class App:
         obs=s.get('obs') if s else None
         vis=annotate(frame,obs or dict(monsters=[],portals=[],obstacles=[]),
                      (self.center[0],self.center[1]+CONFIG.get('player_feet_offset_px',43)) if self.center else None,
-                     s['target'] if s else None,'v21.1 | '+self.vision_reason)
+                     s['target'] if s else None,'codex test1 | '+self.vision_reason)
         for i in (0,2):
             if len(self.calibration.points)==4:
                 a,b=self.calibration.points[i:i+2]
                 cv2.line(vis,tuple(map(int,a)),tuple(map(int,b)),(0,255,255),1)
+                measured=read_gauge_info(frame,[a,b],'hp' if i==0 else 'mp')
+                if measured['row'] is not None:
+                    row=measured['row'];half=max(1,measured['rows']//2)
+                    cv2.rectangle(vis,(int(a[0]),row-half),(int(b[0]),row+half),(0,220,0),1)
         cv2.imwrite(str(ROOT/'vision_check.png'),vis)
-        info=dict(build='v21.1-movement',reason=self.vision_reason,snapshot=s,health=self.worker.health(),
-                  gauge_points=self.calibration.points,hp=self.last_hp,mp=self.last_mp,stop_reason=self.controller.pause_reason)
+        info=dict(build='codex test1',reason=self.vision_reason,snapshot=s,health=self.worker.health(),
+                  gauge_points=self.calibration.points,hp=self.last_hp,mp=self.last_mp,stop_reason=self.controller.pause_reason,
+                  gauge_reads=[read_gauge_info(frame,self.calibration.points[:2],'hp'),read_gauge_info(frame,self.calibration.points[2:],'mp')] if len(self.calibration.points)==4 else None)
         (ROOT/'vision_scores.json').write_text(json.dumps(info,indent=2),encoding='utf-8')
         logging.info('Diagnostic saved: %s',self.vision_reason)
     def run(self):
@@ -276,7 +283,9 @@ class App:
                     if now-last_capture<.10:time.sleep(.01);continue
                     last_capture=now
                     frame=np.array(cap.grab(region))[:,:,:3].copy();self.frame_id+=1
-                    hp,mp=read_status(frame,self.calibration.points)
+                    hp_info=read_gauge_info(frame,self.calibration.points[:2],'hp')
+                    mp_info=read_gauge_info(frame,self.calibration.points[2:],'mp')
+                    hp,mp=hp_info['value'],mp_info['value']
                     self.last_hp,self.last_mp=hp,mp
                     if hp is None or mp is None:
                         self.bad_reads+=1
@@ -294,7 +303,7 @@ class App:
                     failure=self.vision_failure(now)
                     if failure:
                         self.diagnostic(frame);self.stop(failure);continue
-                    attack=bool(s and s.get('obs') and s['obs']['monsters'])
+                    attack=self.combat.active(now)
                     target=self.movement_target(now)
                     coin=None
                     if CONFIG['loot_enabled'] and self.available_coins and self.escape is None:
@@ -308,12 +317,13 @@ class App:
                         self.diagnostic(frame);self.save_diagnostic=False
                     if now-self.last_notice>=3.:
                         health=self.worker.health()
-                        logging.info('HUD HP=%s MP=%s mobs=%s frame_age=%s semantic_age=%s camera=%s move=%s reason=%s detector=%s detector_seconds=%s',
+                        logging.info('HUD HP=%s MP=%s mobs=%s frame_age=%s semantic_age=%s camera=%s move=%s reason=%s detector=%s detector_seconds=%s gauge_rows=%s combat=%s',
                             hp,mp,len(s['obs']['monsters']) if s and s.get('obs') is not None else 'unknown',
                             round(now-s['captured'],2) if s else None,
                             round(s['semantic_age'],2) if s and s.get('semantic_age') is not None else None,
                             s['confident'] if s else False,self.move,self.vision_reason,
-                            health['detector']['phase'],health['detector'].get('duration'))
+                            health['detector']['phase'],health['detector'].get('duration'),
+                            [hp_info['row'],mp_info['row']],attack)
                         self.last_notice=now
                     if self.move and target is None and now-self.last_move_notice>=3.:
                         held=('buff sequence' if self.controller.buffs.queue else

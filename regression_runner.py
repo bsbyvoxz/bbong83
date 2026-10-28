@@ -24,7 +24,10 @@ def annotate(frame,obs,anchor=None,target=None,reason=''):
         count=sum(np.hypot(z['x']-m['x'],z['y']-m['y'])<=185 for z in obs['monsters'])
         cv2.putText(vis,f"{m['kind']} {m['confidence']:.2f} pack={count}",(x,max(15,y-4)),0,.45,color,1)
     for z in obs['portals']+obs['obstacles']:
-        cv2.circle(vis,(int(z['x']),int(z['y'])),int(z['radius']),(0,40,255),2)
+        if z.get('geometry')=='rectangle':
+            x,y,w,h=z['box'];pad=z.get('padding',18)
+            cv2.rectangle(vis,(x-pad,y-pad),(x+w+pad,y+h+pad),(0,40,255),2)
+        else:cv2.circle(vis,(int(z['x']),int(z['y'])),int(z['radius']),(0,40,255),2)
         cv2.putText(vis,z['kind'],(int(z['x']),int(z['y'])),0,.5,(0,80,255),1)
     if anchor is not None:
         a=tuple(map(int,anchor));cv2.circle(vis,a,8,(255,255,0),2)

@@ -1,0 +1,23 @@
+[
+  {
+    "image": "black_hands_void.png",
+    "before_seconds": 0.8756,
+    "before_mobs": 7,
+    "codex_test1_seconds": 0.3997,
+    "codex_test1_mobs": 7
+  },
+  {
+    "image": "image(20261028-082731).png",
+    "before_seconds": 0.6461,
+    "before_mobs": 4,
+    "codex_test1_seconds": 0.2952,
+    "codex_test1_mobs": 4
+  },
+  {
+    "image": "frame_30.png",
+    "before_seconds": 0.9172,
+    "before_mobs": 4,
+    "codex_test1_seconds": 0.3949,
+    "codex_test1_mobs": 4
+  }
+]

@@ -1,9 +1,7 @@
-# Polar v21.1 downloads
+# Current: codex test1.zip
 
-Polar_v21_CODE.zip: complete current project.
+Download codex test1.zip. Stop the previous controller with F12, extract its CONTENTS into the existing directory containing polar_v18.py and START.bat, overwrite files, and run START.bat. Register the visible ground directly below the character feet with F9, then F10.
 
-Polar_v21_1_MOVEMENT_FIX.zip: current small patch for existing v21 folders. Stop with F12, extract into the directory containing polar_v18.py, overwrite matching files, run START.bat, press F9 then F10. Calibration and config are preserved.
+The archive has no outer directory and preserves config.json, gauge_points.json, buff_state.json and .venv. It contains the full project with config.example.json for a new installation. Read CODEX_TEST1_README.md.
 
-Polar_v21_SETUP_FIX.zip: older setup-only fix. The movement patch already includes this setup fix.
-
-Read MOVEMENT_FIX_README.md and TEST_RESULTS.md. Live Windows/AHK gameplay remains unverified.
+Prior Polar_v21* archives are retained as historical downloads; they are not the latest version.

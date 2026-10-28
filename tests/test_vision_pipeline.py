@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 import numpy as np
 
-from control_core import Controller, CoinMemory, MoveEvidence
+from control_core import Controller, CoinMemory, MoveEvidence, CombatPresence
 from polar_v18 import App
 from vision_worker import VisionWorker, project_observations
 
@@ -81,7 +81,7 @@ class LivePipelineTests(unittest.TestCase):
                 if worker.snapshot and worker.snapshot['target']:break
             self.assertIsNotNone(worker.snapshot['target'],worker.snapshot['reason'])
             app=App.__new__(App);app.worker=worker;app.generation=1
-            app.snapshot=None;app.coins=CoinMemory();app.last_coins=-1;app.available_coins=[]
+            app.snapshot=None;app.coins=CoinMemory();app.combat=CombatPresence();app.last_coins=-1;app.available_coins=[]
             app.move=True;app.next_move=0.;app.escape=None;app.center=(300,300)
             app.controller=Controller({});now=time.monotonic();app.controller.start(now)
             app.controller.buffs.queue=[];app.controller.next_wheel=now+10.

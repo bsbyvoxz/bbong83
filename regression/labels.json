@@ -1,24 +1,109 @@
 {
   "schema": 1,
-  "notes": "Manual negative regions, NOT exhaustive bounding-box ground truth. Coordinates in original source PNG. Ref templates derived from two supplied screenshots; video is held out.",
+  "notes": "Manual negative regions, not exhaustive ground truth. Reference templates use supplied screenshots and video frame t=20s; that frame is training, while other sampled video times are held out.",
   "negative_regions": {
-    "image(20261028-082731).png": [[0,780,75,130],[600,535,180,70],[100,110,460,210]],
-    "black_hands_void.png": [[590,670,90,80],[20,225,65,80]],
-    "image(20261028-075504).png": [[0,0,141,141]]
+    "image(20261028-082731).png": [
+      [
+        0,
+        780,
+        75,
+        130
+      ],
+      [
+        600,
+        535,
+        180,
+        70
+      ],
+      [
+        100,
+        110,
+        460,
+        210
+      ]
+    ],
+    "black_hands_void.png": [
+      [
+        590,
+        670,
+        90,
+        80
+      ],
+      [
+        20,
+        225,
+        65,
+        80
+      ]
+    ],
+    "image(20261028-075504).png": [
+      [
+        0,
+        0,
+        141,
+        141
+      ]
+    ]
   },
   "game_rectangles": {
-    "image(20261028-092306).png": [951,22,969,994],
-    "image(20261028-094655).png": [945,22,964,1020],
-    "stuck_black_hands.png": [892,22,965,944],
-    "latest_far_mob_problem.png": [0,24,952,967],
-    "image(20261028-082731).png": [10,20,966,959],
-    "stairs_platform.png": [13,23,1528,906],
-    "portal_stairs.png": [0,24,1567,891],
-    "overview_mobs.png": [0,23,1602,884]
+    "image(20261028-092306).png": [
+      951,
+      22,
+      969,
+      994
+    ],
+    "image(20261028-094655).png": [
+      945,
+      22,
+      964,
+      1020
+    ],
+    "stuck_black_hands.png": [
+      892,
+      22,
+      965,
+      944
+    ],
+    "latest_far_mob_problem.png": [
+      0,
+      24,
+      952,
+      967
+    ],
+    "image(20261028-082731).png": [
+      10,
+      20,
+      966,
+      959
+    ],
+    "stairs_platform.png": [
+      13,
+      23,
+      1528,
+      906
+    ],
+    "portal_stairs.png": [
+      0,
+      24,
+      1567,
+      891
+    ],
+    "overview_mobs.png": [
+      0,
+      23,
+      1602,
+      884
+    ]
   },
   "positive_reference_checks": {
-    "black_hands_void.png": {"minimum_monsters": 3},
-    "image(20261028-082731).png": {"minimum_monsters": 3},
-    "portal_stairs.png": {"minimum_portals": 1}
+    "black_hands_void.png": {
+      "minimum_monsters": 3
+    },
+    "image(20261028-082731).png": {
+      "minimum_monsters": 3
+    },
+    "portal_stairs.png": {
+      "minimum_portals": 1
+    }
   }
 }
