@@ -1,0 +1,10 @@
+{
+  "decoded": 1239,
+  "declared": 1239,
+  "samples": 389,
+  "ready": 116,
+  "camera_confident": 245,
+  "targets": 25,
+  "max_fast_frame_age": 0.375,
+  "note": "Hypothetical anchor; no game inputs, ground-truth movements or actual navigation tested."
+}

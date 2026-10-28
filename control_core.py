@@ -166,11 +166,14 @@ class MoveEvidence:
     target: tuple
     interrupted: bool = False
     recovery: bool = False
-    def outcome(self, now, world, valid, confident, timeout=3.6, minimum=12.):
+    motion_epoch: int | None = None
+    def outcome(self, now, world, valid, confident, timeout=3.6, minimum=12., current_epoch=None):
         if now-self.at < timeout:
             return 'pending'
         if self.interrupted:
             return 'interrupted'
+        if self.motion_epoch is not None and current_epoch is not None and self.motion_epoch!=current_epoch:
+            return 'unknown'
         if not confident or valid-self.valid < 2:
             return 'unknown'
         return 'moved' if hypot(world[0]-self.world[0],world[1]-self.world[1]) >= minimum else 'stuck'

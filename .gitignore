@@ -15,3 +15,5 @@ regression_output/
 references/*.mp4*
 runtime.lock
 .venv.previous-*/
+core
+core.*

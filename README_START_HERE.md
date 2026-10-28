@@ -1,4 +1,4 @@
-# Polar v21 — v20 기반 통합 수정본
+# Polar v21.1 — v20 기반 통합 수정본
 
 실행 파일명 `polar_v18.py`는 기존 런처 호환을 위해 유지했습니다. 수정된 전체 폴더를 새 Windows 디렉터리에 풀어 사용하세요. **실제 게임 입력·서버의 스킬 수락은 이 Linux 환경에서 검증하지 못했습니다.** 오프라인 테스트 통과는 완전한 자동사냥이나 충돌 없는 이동을 뜻하지 않습니다.
 
@@ -57,4 +57,4 @@ python TEST_OFFLINE.py --video "경로/gameplay_camera_motion.mp4" --require-vid
 
 주변 플레이어/아이템 소유권 판별, 자동화 은폐 및 탐지 회피는 구현하지 않았습니다. 게임 운영 규정을 확인하세요. 자동화는 계정 제재 대상일 수 있으며 무인 실행을 권장하지 않습니다.
 
-세부 변경: `CHANGELOG.md`. 검증 근거와 미검증 항목: `TEST_RESULTS.md`.
+이동 수정 적용: `MOVEMENT_FIX_README.md`. 세부 변경: `CHANGELOG.md`. 검증 근거와 미검증 항목: `TEST_RESULTS.md`.

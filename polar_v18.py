@@ -9,8 +9,6 @@ import logging
 from logging.handlers import RotatingFileHandler
 import os
 from pathlib import Path
-import queue
-import threading
 import time
 import traceback
 
@@ -19,67 +17,22 @@ import numpy as np
 from bridge import FileBridge, atomic_text
 from control_core import Controller, CoinMemory, MoveEvidence
 from perception import Calibration, BuffIcons, read_status
-from vision_engine import VisionEngine, Navigator
+from vision_engine import VisionEngine
+from vision_worker import VisionWorker as PerceptionWorker
 
 ROOT=Path(__file__).resolve().parent
 TITLE='Trickster Don Cavalier'
 CONFIG=dict(max_mp=8500,mp_restore=4000,wheel_mp=550,wheel_interval=10.25,
             buff_fallback_seconds=285,movement_default=True,leash_px=1100,
-            vision_stale_seconds=2.5,stuck_timeout=3.6,min_move_progress=12.,
+            vision_stale_seconds=2.5,semantic_stale_seconds=4.,stuck_timeout=3.6,min_move_progress=12.,
             move_interval=3.2,coin_suppress_seconds=180,loot_enabled=True)
 try: CONFIG.update(json.loads((ROOT/'config.json').read_text(encoding='utf-8')))
 except FileNotFoundError: pass
 cv2.setNumThreads(2)
 
-class VisionWorker:
-    """Owns CV/navigation state. Main input loop never waits for a CV lock."""
+class VisionWorker(PerceptionWorker):
     def __init__(self):
-        self.jobs=queue.Queue(maxsize=1)
-        self.commands=queue.SimpleQueue()
-        self.snapshot=None
-        self.quit=threading.Event()
-        self.thread=threading.Thread(target=self.run,daemon=True,name='polar-vision')
-        self.thread.start()
-    def submit(self, job):
-        try:self.jobs.get_nowait()
-        except queue.Empty:pass
-        try:self.jobs.put_nowait(job)
-        except queue.Full:pass
-    def run(self):
-        engine=VisionEngine();icons=BuffIcons();navigator=Navigator(CONFIG['leash_px'])
-        generation=-1;sequence=0
-        while not self.quit.is_set():
-            try:job=self.jobs.get(timeout=.2)
-            except queue.Empty:continue
-            try:
-                if generation!=job['generation']:
-                    navigator.reset();generation=job['generation']
-                while not self.commands.empty():
-                    kind, args=self.commands.get_nowait()
-                    if kind=='blocked':navigator.mark_blocked(*args)
-                frame=job['frame'];anchor=job['anchor']
-                navigator.tracker.update(frame,anchor)
-                obs=engine.analyze(frame)
-                flags,scores,reliable=icons.read(frame)
-                if job['escape'] is not None:
-                    target,why=navigator.escape_from_stuck(frame,anchor,job['escape'],obs) if navigator.tracker.confident else (None,'camera uncertain')
-                elif job['move']:
-                    target,why=navigator.choose(frame,anchor,obs)
-                else:target,why=None,'movement off'
-                if target is not None and np.linalg.norm(np.array(target)-anchor)>CONFIG.get('max_move_click_px',310):
-                    target=None;why='waypoint exceeds configured click distance'
-                sequence+=1
-                self.snapshot=dict(sequence=sequence,generation=generation,captured=job['captured'],size=frame.shape[1::-1],
-                    obs=obs,icons=flags,icon_scores=scores,hud_reliable=reliable,target=target,reason=why,
-                    coins=engine.coin_candidates(frame,anchor),world=tuple(navigator.tracker.world),
-                    confident=navigator.tracker.confident,valid=navigator.tracker.valid_updates,
-                    escape=job['escape'],anchor=anchor)
-            except Exception as exc:
-                logging.exception('VISION worker failure')
-                self.snapshot=None
-    def close(self):
-        self.quit.set()
-        self.thread.join(timeout=2.)
+        super().__init__(CONFIG,engine_factory=VisionEngine)
 
 def configure_log():
     logger=logging.getLogger();logger.setLevel(logging.INFO)
@@ -113,9 +66,10 @@ class App:
         self.escape_failures=0;self.next_move=0.;self.last_submit=0.;self.last_coins=-1
         self.snapshot=None;self.available_coins=[];self.last_notice=0.;self.vision_missing_at=None
         self.last_hp=None;self.last_mp=None;self.region=None;self.pending_move_context=None
-        self.bad_reads=0
+        self.bad_reads=0;self.vision_reason="not started";self.last_move_notice=0.
         self.load_state()
-        logging.info('v21 | F9 anchor | Ctrl+F9 x4 gauges | F10 run/pause | F8 movement | Ctrl+F7 diagnostics | F11 STOP | F12 exit')
+        logging.info('v21.1-movement | F9 anchor | Ctrl+F9 x4 gauges | F10 run/pause | F8 movement | Ctrl+F7 diagnostics | F11 STOP | F12 exit')
+        logging.info('Runtime source: %s',ROOT)
         logging.info('F7 alone belongs to game buffs. AHK SendEvent retained. Supervised use only.')
     def region_now(self):
         hwnd=self.u.GetForegroundWindow();title=ctypes.create_unicode_buffer(512)
@@ -174,7 +128,6 @@ class App:
             elif name=='F8':
                 self.move=not self.move
                 self.controller.move_evidence=None;self.escape=None
-                self.generation+=1;self.coins.invalidate()
                 logging.info('Movement %s',self.move)
             elif name=='F10':
                 if self.controller.running:self.stop('pause')
@@ -182,6 +135,7 @@ class App:
                 elif self.center is None or self.anchor_size!=size:logging.warning('START BLOCKED: F9 anchor for this client size')
                 elif not self.bridge.ready():logging.warning('START BLOCKED: AHK v1.1 bridge heartbeat missing; launch START.bat')
                 else:
+                    self.generation+=1;self.snapshot=None;self.available_coins=[];self.coins.invalidate()
                     self.bridge.begin();self.controller.start(time.monotonic());self.vision_missing_at=time.monotonic()
                     logging.info('RUN; preserved buff queue %s; movement %s',self.controller.buffs.queue,self.move)
             elif name=='F7' and ctrl:
@@ -194,9 +148,11 @@ class App:
         s=self.worker.snapshot
         if s is None or s['generation']!=self.generation or s['size']!=(region['width'],region['height']) or now-s['captured']>CONFIG['vision_stale_seconds']:
             self.snapshot=None;self.available_coins=[]
+            self.vision_reason=('no fast frame' if s is None else 'fast frame stale or window/anchor generation changed')
             self.coins.invalidate()
             return
-        self.snapshot=s;self.vision_missing_at=None
+        self.snapshot=s;self.vision_reason=s['reason']
+        if s.get('obs') is not None:self.vision_missing_at=None
         if s['sequence']!=self.last_coins:
             self.available_coins=self.coins.update(s['coins'],s['world'],s['confident'],s['sequence'],now)
             self.last_coins=s['sequence']
@@ -207,7 +163,7 @@ class App:
         if rec is None:return
         s=self.snapshot
         outcome=rec.outcome(now,s['world'] if s else rec.world,s['valid'] if s else rec.valid,
-                            bool(s and s['confident']),CONFIG['stuck_timeout'],CONFIG['min_move_progress'])
+                            bool(s and s['confident']),CONFIG['stuck_timeout'],CONFIG['min_move_progress'],s.get('motion_epoch') if s else None)
         if outcome=='pending':return
         self.controller.move_evidence=None
         logging.info('MOVE_RESULT %s target=%s recovery=%s',outcome,rec.target,rec.recovery)
@@ -224,7 +180,7 @@ class App:
             self.move=False;self.escape=None
             logging.warning('Movement OFF: cannot verify camera motion; F8 to retry after inspection')
         else:
-            self.worker.commands.put(('blocked',(rec.target,self.center,now)))
+            self.worker.commands.put(('blocked',(rec.target,(self.center[0],self.center[1]+CONFIG.get('player_feet_offset_px',43)),now)))
             self.escape_failures+=1
             self.escape=rec.target;self.next_move=now+.6
         if self.escape_failures>=2:
@@ -243,7 +199,7 @@ class App:
             elif action.kind=='MOVE':
                 context=self.pending_move_context
                 if context:
-                    self.controller.move_evidence=MoveEvidence(sent,context['world'],context['valid'],action.point,recovery=context['recovery'])
+                    self.controller.move_evidence=MoveEvidence(sent,context['world'],context['valid'],action.point,recovery=context['recovery'],motion_epoch=context.get('motion_epoch'))
                 self.next_move=sent+CONFIG['move_interval']
             elif action.kind=='PICK':
                 # Attempt was already recorded on publication, including lost ACKs.
@@ -252,22 +208,51 @@ class App:
     def dispatch(self,action,region,now):
         if action.kind=='MOVE':
             s=self.snapshot
-            self.pending_move_context=dict(world=s['world'],valid=s['valid'],recovery=self.escape is not None)
+            self.pending_move_context=dict(world=s['world'],valid=s['valid'],recovery=self.escape is not None,motion_epoch=s.get('motion_epoch'))
         elif action.kind=='PICK':
             self.coins.attempted(action.index,now)
             self.available_coins=[c for c in self.available_coins if c[0]!=action.index]
         self.bridge.send(action,(region['left'],region['top']))
-    def diagnostic(self,frame):
+    def movement_target(self,now):
         s=self.snapshot
-        if s is None:return
+        if not (self.move and s and s.get('obs') is not None and s['confident']
+                and now>=self.next_move and not self.controller.move_evidence):return None
+        target=s['target'] if s['escape']==self.escape else None
+        if self.escape is not None and target is None:
+            self.move=False;self.escape=None
+            logging.warning('Movement OFF: no fully checked escape route')
+        return target
+    def vision_failure(self,now):
+        health=self.worker.health()
+        for name in ('fast','detector'):
+            if not health[name]['alive']:
+                return 'vision '+name+' stopped: '+str(health[name].get('error'))
+        if self.snapshot is None or self.snapshot.get('obs') is None:
+            if self.vision_missing_at is None:self.vision_missing_at=now
+            if now-self.vision_missing_at>8.:
+                return 'vision unavailable for 8 seconds: '+self.vision_reason
+        else:self.vision_missing_at=None
+        return None
+    def diagnostic(self,frame):
         from regression_runner import annotate
-        cv2.imwrite(str(ROOT/'vision_check.png'),annotate(frame,s['obs'],self.center,s['target'],s['reason']))
-        (ROOT/'vision_scores.json').write_text(json.dumps(s,indent=2),encoding='utf-8')
-        logging.info('Diagnostic saved (latest asynchronous result, age %.2fs)',time.monotonic()-s['captured'])
+        s=self.snapshot
+        obs=s.get('obs') if s else None
+        vis=annotate(frame,obs or dict(monsters=[],portals=[],obstacles=[]),
+                     (self.center[0],self.center[1]+CONFIG.get('player_feet_offset_px',43)) if self.center else None,
+                     s['target'] if s else None,'v21.1 | '+self.vision_reason)
+        for i in (0,2):
+            if len(self.calibration.points)==4:
+                a,b=self.calibration.points[i:i+2]
+                cv2.line(vis,tuple(map(int,a)),tuple(map(int,b)),(0,255,255),1)
+        cv2.imwrite(str(ROOT/'vision_check.png'),vis)
+        info=dict(build='v21.1-movement',reason=self.vision_reason,snapshot=s,health=self.worker.health(),
+                  gauge_points=self.calibration.points,hp=self.last_hp,mp=self.last_mp,stop_reason=self.controller.pause_reason)
+        (ROOT/'vision_scores.json').write_text(json.dumps(info,indent=2),encoding='utf-8')
+        logging.info('Diagnostic saved: %s',self.vision_reason)
     def run(self):
         import mss
         self.save_diagnostic=False
-        last_capture=0.;last_heartbeat=0.
+        last_capture=0.;last_heartbeat=0.;frame=None
         try:
             with mss.mss() as cap:
                 while not self.exiting:
@@ -285,7 +270,9 @@ class App:
                     self.region=region
                     if now-last_heartbeat>=.2:self.bridge.heartbeat();last_heartbeat=now
                     self.acknowledge(now)
-                    if not self.controller.running:self.bridge.stop();continue
+                    if not self.controller.running:
+                        if frame is not None:self.diagnostic(frame)
+                        self.bridge.stop();continue
                     if now-last_capture<.10:time.sleep(.01);continue
                     last_capture=now
                     frame=np.array(cap.grab(region))[:,:,:3].copy();self.frame_id+=1
@@ -293,9 +280,10 @@ class App:
                     self.last_hp,self.last_mp=hp,mp
                     if hp is None or mp is None:
                         self.bad_reads+=1
-                        if self.bad_reads>=5:self.stop('gauges unreadable; inspect calibration')
+                        if self.bad_reads>=5:
+                            self.diagnostic(frame);self.stop('gauges unreadable; inspect calibration');continue
                     else:self.bad_reads=0
-                    if now-self.last_submit>=.45:
+                    if now-self.last_submit>=.10:
                         self.worker.submit(dict(frame=frame,anchor=self.center,generation=self.generation,
                             captured=now,move=self.move,escape=self.escape))
                         self.last_submit=now
@@ -303,32 +291,34 @@ class App:
                     s=self.snapshot
                     self.controller.observe(now,hp,mp,self.frame_id,s['icons'] if s else None,s['sequence'] if s else -1)
                     self.check_movement(now)
-                    if s is None:
-                        if self.vision_missing_at is None:self.vision_missing_at=now
-                        if now-self.vision_missing_at>8.:
-                            self.stop('vision unavailable/stale for 8 seconds');continue
-                    attack=bool(s and s['obs']['monsters'])
-                    # Stop blind repeated F3 on empty/stale screens; buffs and health still managed.
-                    target=None
-                    if self.move and s and s['confident'] and now>=self.next_move and not self.controller.move_evidence:
-                        if s['escape']==self.escape:target=s['target']
-                        if self.escape is not None and target is None:
-                            self.move=False;self.escape=None
-                            logging.warning('Movement OFF: no fully checked escape route')
+                    failure=self.vision_failure(now)
+                    if failure:
+                        self.diagnostic(frame);self.stop(failure);continue
+                    attack=bool(s and s.get('obs') and s['obs']['monsters'])
+                    target=self.movement_target(now)
                     coin=None
                     if CONFIG['loot_enabled'] and self.available_coins and self.escape is None:
                         coin=self.available_coins[0]
                     action=self.controller.choose(now,self.center,attack,coin,target)
                     if action:self.dispatch(action,region,now)
-                    if not self.controller.running:self.bridge.stop()
+                    if not self.controller.running:
+                        self.diagnostic(frame);self.bridge.stop()
                     if self.save_diagnostic and s:
                         # I/O only; CV and path planning remain in worker.
                         self.diagnostic(frame);self.save_diagnostic=False
-                    if now-self.last_notice>=10.:
-                        logging.info('HUD HP=%s MP=%s mobs=%s vision_age=%s move=%s reason=%s',hp,mp,
-                            len(s['obs']['monsters']) if s else 'unknown',round(now-s['captured'],2) if s else None,
-                            self.move,s['reason'] if s else 'stale/unknown')
+                    if now-self.last_notice>=3.:
+                        health=self.worker.health()
+                        logging.info('HUD HP=%s MP=%s mobs=%s frame_age=%s semantic_age=%s camera=%s move=%s reason=%s detector=%s detector_seconds=%s',
+                            hp,mp,len(s['obs']['monsters']) if s and s.get('obs') is not None else 'unknown',
+                            round(now-s['captured'],2) if s else None,
+                            round(s['semantic_age'],2) if s and s.get('semantic_age') is not None else None,
+                            s['confident'] if s else False,self.move,self.vision_reason,
+                            health['detector']['phase'],health['detector'].get('duration'))
                         self.last_notice=now
+                    if self.move and target is None and now-self.last_move_notice>=3.:
+                        held=('buff sequence' if self.controller.buffs.queue else
+                              'waiting for movement result' if self.controller.move_evidence else self.vision_reason)
+                        logging.info('MOVE_HELD: %s',held);self.last_move_notice=now
                     self.flush_events()
         finally:
             self.stop('runtime closed');self.worker.close();self.flush_events()

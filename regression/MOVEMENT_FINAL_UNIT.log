@@ -1,0 +1,95 @@
+test_all_false_never_seen_does_not_spam (test_core.BuffTests.test_all_false_never_seen_does_not_spam) ... ok
+test_cached_frame_cannot_accumulate_false_evidence (test_core.BuffTests.test_cached_frame_cannot_accumulate_false_evidence) ... ok
+test_confirmed_loss_refreshes_only_missing (test_core.BuffTests.test_confirmed_loss_refreshes_only_missing) ... ok
+test_recent_seen_loss_does_not_recast_under_30_seconds (test_core.BuffTests.test_recent_seen_loss_does_not_recast_under_30_seconds) ... ok
+test_restored_recent_cast_is_not_startup_repeated (test_core.BuffTests.test_restored_recent_cast_is_not_startup_repeated) ... ok
+test_unknown_falls_back_at_285_seconds (test_core.BuffTests.test_unknown_falls_back_at_285_seconds) ... ok
+test_unknown_resets_disappearance_evidence (test_core.BuffTests.test_unknown_resets_disappearance_evidence) ... ok
+test_cached_frame_cannot_confirm_coin (test_core.CoinTests.test_cached_frame_cannot_confirm_coin) ... ok
+test_different_distant_coin_can_be_picked (test_core.CoinTests.test_different_distant_coin_can_be_picked) ... ok
+test_disappearance_does_not_clear_attempt (test_core.CoinTests.test_disappearance_does_not_clear_attempt) ... ok
+test_one_attempt_survives_camera_translation (test_core.CoinTests.test_one_attempt_survives_camera_translation) ... ok
+test_tracking_gap_holds_reidentified_coin (test_core.CoinTests.test_tracking_gap_holds_reidentified_coin) ... ok
+test_hp_inclusive_and_mp_strict_boundaries (test_core.GaugeTests.test_hp_inclusive_and_mp_strict_boundaries) ... ok
+test_one_low_frame_is_not_a_potion (test_core.GaugeTests.test_one_low_frame_is_not_a_potion) ... ok
+test_recovery_clears_low_streak_no_extra_potion (test_core.GaugeTests.test_recovery_clears_low_streak_no_extra_potion) ... ok
+test_same_frame_is_not_confirmation (test_core.GaugeTests.test_same_frame_is_not_confirmation) ... ok
+test_unconfirmed_recovery_does_not_repeat_forever (test_core.GaugeTests.test_unconfirmed_recovery_does_not_repeat_forever) ... ok
+test_values_above_threshold_do_not_trigger (test_core.GaugeTests.test_values_above_threshold_do_not_trigger) ... ok
+test_bad_motion_is_unknown (test_core.MovementTests.test_bad_motion_is_unknown) ... ok
+test_cast_interruption_is_not_stuck (test_core.MovementTests.test_cast_interruption_is_not_stuck) ... ok
+test_no_stuck_before_command_timeout (test_core.MovementTests.test_no_stuck_before_command_timeout) ... ok
+test_recovery_must_show_displacement (test_core.MovementTests.test_recovery_must_show_displacement) ... ok
+test_ack_timeout_stops_without_retry (test_core.SchedulerTests.test_ack_timeout_stops_without_retry) ... ok
+test_buff_queue_pops_only_after_sent (test_core.SchedulerTests.test_buff_queue_pops_only_after_sent) ... ok
+test_due_tick_never_issues_more_than_one_command (test_core.SchedulerTests.test_due_tick_never_issues_more_than_one_command) ... ok
+test_due_wheel_preempts_buff_potion_loot_and_move (test_core.SchedulerTests.test_due_wheel_preempts_buff_potion_loot_and_move) ... ok
+test_empty_scene_does_not_repeat_wheel (test_core.SchedulerTests.test_empty_scene_does_not_repeat_wheel) ... ok
+test_expected_mp_drop_is_consistency_evidence (test_core.SchedulerTests.test_expected_mp_drop_is_consistency_evidence) ... ok
+test_mana_interference_is_unknown_not_failure (test_core.SchedulerTests.test_mana_interference_is_unknown_not_failure) ... ok
+test_mana_recovery_pending_holds_attack (test_core.SchedulerTests.test_mana_recovery_pending_holds_attack) ... ok
+test_mana_refill_preserves_pending_buff (test_core.SchedulerTests.test_mana_refill_preserves_pending_buff) ... ok
+test_missing_gauge_blocks_every_action (test_core.SchedulerTests.test_missing_gauge_blocks_every_action) ... ok
+test_missing_mp_drop_does_not_retry_or_reset_due (test_core.SchedulerTests.test_missing_mp_drop_does_not_retry_or_reset_due) ... ok
+test_pause_mid_buff_does_not_immediately_duplicate (test_core.SchedulerTests.test_pause_mid_buff_does_not_immediately_duplicate) ... ok
+test_pause_resume_does_not_reset_cooldown_or_buffs (test_core.SchedulerTests.test_pause_resume_does_not_reset_cooldown_or_buffs) ... ok
+test_rejected_receipt_stops_and_retains_pointer (test_core.SchedulerTests.test_rejected_receipt_stops_and_retains_pointer) ... ok
+test_startup_chain_order_and_pointer_after_wheel (test_core.SchedulerTests.test_startup_chain_order_and_pointer_after_wheel) ... ok
+test_three_unconfirmed_wheels_stop (test_core.SchedulerTests.test_three_unconfirmed_wheels_stop) ... ok
+test_unknown_receipt_cannot_pop_buff (test_core.SchedulerTests.test_unknown_receipt_cannot_pop_buff) ... ok
+test_missing_anchor_cannot_send_wheel_to_desktop_origin (test_integration.PersistentSafetyTests.test_missing_anchor_cannot_send_wheel_to_desktop_origin) ... ok
+test_second_controller_cannot_take_runtime_lock (test_integration.PersistentSafetyTests.test_second_controller_cannot_take_runtime_lock) ... ok
+test_visible_attempted_coin_never_expires_at_180_seconds (test_integration.PersistentSafetyTests.test_visible_attempted_coin_never_expires_at_180_seconds) ... ok
+test_runtime_recovery_ack_is_not_success_without_motion (test_integration.ReplayTests.test_runtime_recovery_ack_is_not_success_without_motion) ... WARNING:root:Movement OFF: recovery not verified after two attempts; no repeated blind clicks
+ok
+test_runtime_unknown_motion_disables_movement (test_integration.ReplayTests.test_runtime_unknown_motion_disables_movement) ... WARNING:root:Movement OFF: cannot verify camera motion; F8 to retry after inspection
+ok
+test_slow_cv_does_not_block_controller (test_integration.ReplayTests.test_slow_cv_does_not_block_controller) ... ok
+test_ten_minute_replay_no_buff_storm_and_wheel_cadence (test_integration.ReplayTests.test_ten_minute_replay_no_buff_storm_and_wheel_cadence) ... ok
+test_ahk_uses_supported_sender_and_has_no_double_click_or_queue_drain (test_io_vision.BridgeTests.test_ahk_uses_supported_sender_and_has_no_double_click_or_queue_drain) ... ok
+test_atomic_composite_contains_slot_sensitive_action_and_expiry (test_io_vision.BridgeTests.test_atomic_composite_contains_slot_sensitive_action_and_expiry) ... ok
+test_no_bridge_heartbeat_is_not_ready (test_io_vision.BridgeTests.test_no_bridge_heartbeat_is_not_ready) ... ok
+test_priority_filenames_put_wheel_before_other_inputs (test_io_vision.BridgeTests.test_priority_filenames_put_wheel_before_other_inputs) ... ok
+test_receipts_are_session_scoped (test_io_vision.BridgeTests.test_receipts_are_session_scoped) ... ok
+test_stop_revokes_lease_and_discards_old_queue (test_io_vision.BridgeTests.test_stop_revokes_lease_and_discards_old_queue) ... ok
+test_blank_capture_is_unknown (test_io_vision.CalibrationTests.test_blank_capture_is_unknown) ... ok
+test_gauge_reads_actual_colored_fraction (test_io_vision.CalibrationTests.test_gauge_reads_actual_colored_fraction) ... ok
+test_invalid_geometry_rejected (test_io_vision.CalibrationTests.test_invalid_geometry_rejected) ... ok
+test_legacy_without_client_size_is_not_silently_trusted (test_io_vision.CalibrationTests.test_legacy_without_client_size_is_not_silently_trusted) ... ok
+test_persistence_and_resize_invalidation (test_io_vision.CalibrationTests.test_persistence_and_resize_invalidation) ... ok
+test_empty_frame_is_unknown_not_four_missing (test_io_vision.IconTests.test_empty_frame_is_unknown_not_four_missing) ... ok
+test_provided_buff_row_is_recognized_at_different_offsets (test_io_vision.IconTests.test_provided_buff_row_is_recognized_at_different_offsets) ... ok
+test_window_width_does_not_scale_icons (test_io_vision.IconTests.test_window_width_does_not_scale_icons) ... ok
+test_all_dark_frame_cannot_produce_mobs (test_io_vision.PathTests.test_all_dark_frame_cannot_produce_mobs) ... ok
+test_escape_cannot_use_unsafe_first_half (test_io_vision.PathTests.test_escape_cannot_use_unsafe_first_half) ... ok
+test_known_floor_route_passes (test_io_vision.PathTests.test_known_floor_route_passes) ... ok
+test_more_distant_pack_beats_near_two (test_io_vision.PathTests.test_more_distant_pack_beats_near_two) ... ok
+test_narrow_void_near_start_vetoes_whole_path (test_io_vision.PathTests.test_narrow_void_near_start_vetoes_whole_path) ... ok
+test_portal_on_segment_vetoes_even_with_safe_destination (test_io_vision.PathTests.test_portal_on_segment_vetoes_even_with_safe_destination) ... ok
+test_textured_translation_exercises_real_optical_flow (test_io_vision.PathTests.test_textured_translation_exercises_real_optical_flow) ... ok
+test_unsupported_odometry_blocks_exploration (test_io_vision.PathTests.test_unsupported_odometry_blocks_exploration) ... ok
+test_broken_environment_is_preserved_before_replacement (test_setup_environment.SetupTests.test_broken_environment_is_preserved_before_replacement) ... Previous environment preserved at: .venv.previous-f09d5d7315cb
+ok
+test_child_command_failure_is_propagated_and_stops_tests (test_setup_environment.SetupTests.test_child_command_failure_is_propagated_and_stops_tests) ... Using Python: /workspace/polar_work/.venv/bin/python
+ok
+test_compatible_version_and_architecture (test_setup_environment.SetupTests.test_compatible_version_and_architecture) ... ok
+test_real_environment_can_be_created_and_reused (test_setup_environment.SetupTests.test_real_environment_can_be_created_and_reused) ... ok
+test_blocked_detector_does_not_block_motion_publication (test_vision_pipeline.LivePipelineTests.test_blocked_detector_does_not_block_motion_publication) ... ok
+test_close_finishes_busy_opencv_worker_before_return (test_vision_pipeline.LivePipelineTests.test_close_finishes_busy_opencv_worker_before_return) ... ok
+test_detector_initialization_failure_is_reported (test_vision_pipeline.LivePipelineTests.test_detector_initialization_failure_is_reported) ... ok
+test_fresh_path_reaches_real_runtime_move_dispatch_after_slow_detection (test_vision_pipeline.LivePipelineTests.test_fresh_path_reaches_real_runtime_move_dispatch_after_slow_detection) ... ok
+test_old_semantics_are_not_made_fresh_by_new_motion_frames (test_vision_pipeline.LivePipelineTests.test_old_semantics_are_not_made_fresh_by_new_motion_frames) ... ok
+test_camera_projection_moves_boxes_and_keeps_original (test_vision_pipeline.ProjectionTests.test_camera_projection_moves_boxes_and_keeps_original) ... ok
+test_offscreen_monsters_are_discarded (test_vision_pipeline.ProjectionTests.test_offscreen_monsters_are_discarded) ... ok
+test_camera_gap_cannot_be_reported_as_successful_move (test_vision_pipeline.RuntimeHealthTests.test_camera_gap_cannot_be_reported_as_successful_move) ... ok
+test_dead_worker_has_precise_failure (test_vision_pipeline.RuntimeHealthTests.test_dead_worker_has_precise_failure) ... ok
+test_f8_does_not_discard_a_good_camera_track (test_vision_pipeline.RuntimeHealthTests.test_f8_does_not_discard_a_good_camera_track) ... ok
+test_fast_publications_do_not_reset_missing_semantic_timeout (test_vision_pipeline.RuntimeHealthTests.test_fast_publications_do_not_reset_missing_semantic_timeout) ... ok
+test_manual_resume_requires_new_perception_generation (test_vision_pipeline.RuntimeHealthTests.test_manual_resume_requires_new_perception_generation) ... ok
+test_unknown_scene_cannot_issue_move (test_vision_pipeline.RuntimeHealthTests.test_unknown_scene_cannot_issue_move) ... ok
+test_valid_semantics_reset_timeout (test_vision_pipeline.RuntimeHealthTests.test_valid_semantics_reset_timeout) ... ok
+
+----------------------------------------------------------------------
+Ran 86 tests in 5.743s
+
+OK
