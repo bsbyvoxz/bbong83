@@ -1,32 +1,52 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-if exist .venv\Scripts\python.exe goto install
+set "polar_python_cmd="
+rem Probe installed compatible versions instead of trusting py's default runtime.
+call :try_python ".venv\Scripts\python.exe"
+call :try_python py -3.12
+call :try_python py -3.13
+call :try_python py -3.11
+call :try_python py -3.10
+call :try_python python
+call :try_python python3
+if defined polar_python_cmd goto run_setup
+
+rem Supported by the current Python Install Manager. Older launchers may fail;
+rem that case gets explicit manual installation instructions below.
 where py >nul 2>nul
-if errorlevel 1 goto plain_python
-py -3.12 -c "import sys" >nul 2>nul
-if errorlevel 1 goto default_py
-py -3.12 -m venv .venv
-if errorlevel 1 goto failed
-goto install
-:default_py
-py -3 -m venv .venv
-if errorlevel 1 goto failed
-goto install
-:plain_python
-python -m venv .venv
-if errorlevel 1 goto failed
-:install
-.venv\Scripts\python.exe -c "import sys; assert (3,10) <= sys.version_info[:2] < (3,14), 'Use Python 3.10-3.13 (3.12 recommended)'"
-if errorlevel 1 goto failed
-.venv\Scripts\python.exe -m pip install -r requirements.txt
-if errorlevel 1 goto failed
-.venv\Scripts\python.exe -m unittest discover -s tests -v
-if errorlevel 1 goto failed
-echo Setup complete. Install AutoHotkey v1.1.37.02 and run START.bat.
+if errorlevel 1 goto missing_runtime
+echo No compatible installed Python found. Installing Python 3.12 with Python Install Manager...
+py install 3.12
+if errorlevel 1 goto missing_runtime
+call :try_python py -3.12
+if not defined polar_python_cmd goto missing_runtime
+
+:run_setup
+%polar_python_cmd% setup_environment.py
+set "polar_setup_exit=%errorlevel%"
+if not "%polar_setup_exit%"=="0" goto failed
 pause
 exit /b 0
-:failed
-echo Setup failed. Read the error above. Python 3.12 is recommended.
+
+:missing_runtime
+echo.
+echo Python 3.10-3.13 64-bit is required. Python 3.12 is recommended.
+echo If Python Install Manager is installed, run: py install 3.12
+echo Otherwise install Python 3.12 64-bit from https://www.python.org/downloads/windows/
+echo Then run SETUP.bat again. Existing project files are preserved.
 pause
 exit /b 1
+
+:failed
+echo.
+echo Setup failed. Read the specific error above. START.bat has not been run.
+pause
+exit /b %polar_setup_exit%
+
+:try_python
+if defined polar_python_cmd exit /b 0
+%* -c "import sys,struct; sys.exit(0 if (3,10) <= sys.version_info[:2] < (3,14) and struct.calcsize('P') * 8 == 64 else 1)" >nul 2>nul
+if errorlevel 1 exit /b 0
+set "polar_python_cmd=%*"
+exit /b 0

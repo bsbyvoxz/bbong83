@@ -1,6 +1,7 @@
-# Polar v21 download
+# Polar v21 downloads
 
-Download Polar_v21_CODE.zip using GitHub's Download raw file button.
-The ZIP contains the complete runnable project and setup instructions.
+Polar_v21_CODE.zip is the complete project.
 
-SHA-256 is listed in SHA256SUMS.txt. Windows/AHK live gameplay remains unverified; read TEST_RESULTS.md inside the ZIP.
+Polar_v21_SETUP_FIX.zip is a small setup-only patch: extract it into the existing directory containing polar_v18.py, replace SETUP.bat and rerun it.
+
+SHA-256 values: SHA256SUMS.txt. Windows CMD/Install Manager and live game input remain unverified on this Linux worker.

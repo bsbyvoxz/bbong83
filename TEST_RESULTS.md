@@ -42,3 +42,7 @@ Linux x86_64 / Python 3.12.14 / numpy 2.2.6 / OpenCV headless 4.11.0.86 / mss 10
 검증 자료 ZIP: 주석 이미지 **55장**, `results.json`(좌표·confidence·아이콘 점수·영상 시점·경로), `FINAL_VALIDATION.log` 포함. 경량 코드 ZIP은 원본 MP4를 중복 포함하지 않습니다. 영상 없이 검증하면 영상은 skipped이며 `--require-video`로 누락을 실패 처리할 수 있습니다.
 
 실게임 최소 확인: 숫자 1 → F3 실제 효과/MP, 버프 4개와 슬롯 복귀, HP/MP 보정 정확도, F11 정지. 이상 시 `status.txt`, `bridge_status.txt`, 짧은 MP 표시 영상으로 전송 문제와 인식 문제를 분리할 수 있습니다.
+
+## 설치 오류 후속 수정
+
+`python -m unittest discover -s tests -v`: **72개 실행, 72 통과, 실패/skip 0**. 호환 버전/64-bit 판별, 실제 가상환경 생성·재사용, 손상된 가상환경 보존·재생성, 하위 설치 실패 코드 전달을 추가 검증했습니다. Windows의 CMD/Install Manager는 직접 실행하지 못했습니다. 게임 제어 코드는 변경하지 않아 앞선 이미지/영상 검사 결과를 유지하며 재실행한 것으로 보고하지 않습니다.
