@@ -1,0 +1,8 @@
+{
+  "baseline_v20_labelled_false_detections": {
+    "image(20261028-082731).png": 7,
+    "black_hands_void.png": 0,
+    "image(20261028-075504).png": 1
+  },
+  "scope": "Only manually labelled negative regions, not full accuracy"
+}

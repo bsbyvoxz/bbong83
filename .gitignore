@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.py[cod]
+bridge_queue/
+bridge_acks/
+bridge_lease.txt*
+bridge_ready.txt*
+bridge_status.txt*
+status.txt*
+gauge_points.json*
+buff_state.json*
+vision_check.png
+vision_scores.json
+regression_output/
+references/*.mp4*
+runtime.lock
